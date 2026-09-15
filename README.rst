@@ -22,3 +22,6 @@ identical to the upstream master:
 - Added `signal_list` chain method to list available signals
 
 These additions allow us to use symbolic references to pins as they are defined in BSDL files.
+
+NOTE: out-of-source configuration is not supported (not explicitly not but build may break, e.g.,
+      by picking up system-installed urjtag headers).
