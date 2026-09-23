@@ -58,6 +58,11 @@ urj_endian_t urj_endian_from_string (const char *);
  * @param argv0 is remembered as a pointer, it is not strdup()'ed.
  */
 void urj_set_argv0(const char *argv0);
+/**
+ * Set the data directory explicitly; the library makes
+ * a copy of the string passed in.
+ */
+void urj_set_data_dir(const char *data_dir);
 const char *urj_get_data_dir (void);
 
 #endif /* URJ_JTAG_H */
