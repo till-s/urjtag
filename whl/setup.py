@@ -8,7 +8,7 @@ libraries = ['urjtag']
 # tuned ATM; substitute the libraries configure found...
 libraries.extend( w.replace('-l', '') for w in "-lftdi -lusb-1.0  ".split() if w.replace('-l', '') not in libraries )
 
-pre='urjtag/'
+pre='../urjtag/'
 
 setup(name="urjtag",
       version="2021.03",
