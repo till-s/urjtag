@@ -1202,13 +1202,72 @@ urjtag_get_data_dir (PyObject *self, PyObject *args)
     return Py_BuildValue ("s", urj_get_data_dir());
 }
 
+static void
+reloc_data_dir(PyObject *m, const char *rel_data_dir)
+{
+    PyObject   *p = NULL;
+    PyObject   *e;
+    const char *modFile;
+    char       *modPath;
+    char       *bs;
+    Py_ssize_t  modFileSize;
+
+    if ( rel_data_dir[0] != '/' ) {
+        p = PyObject_GetAttrString(m, "__file__");
+        if ( p ) {
+            if ( (modFile = PyUnicode_AsUTF8AndSize(p, &modFileSize)) ) {
+                modFileSize += strlen(rel_data_dir) + 1;
+                if ( (modPath = malloc(modFileSize)) ) {
+                    strncpy(modPath, modFile, modFileSize);
+                    if ( (bs = strrchr(modPath, '/')) ) {
+                       strncpy(bs+1, rel_data_dir, modFileSize - (bs+1-modPath));
+                    }
+                    urj_set_data_dir(modPath);
+                }
+                free(modPath);
+            } else {
+                if ( (e = PyErr_Occurred()) ) {
+                    fprintf(stdout, "WARNING (skipping urj_set_data_dir): ");
+                    PyObject_Print(e, stdout, 0);
+                }
+                PyErr_Clear();
+            }
+            Py_DECREF(p);
+        } else {
+            if ( (e = PyErr_Occurred()) ) {
+                fprintf(stdout, "WARNING (skipping urj_set_data_dir): ");
+                PyObject_Print(e, stdout, 0);
+            }
+            PyErr_Clear();
+        }
+    } else {
+        /* use absolute path verbatim */
+        urj_set_data_dir(rel_data_dir);
+    }
+}
+
+static PyObject *
+urjtag_reloc_data_dir(PyObject *self, PyObject *args)
+{
+    const char  *rel_data_dir;
+
+    if (!PyArg_ParseTuple (args, "s", &rel_data_dir))
+        return NULL;
+
+    reloc_data_dir(self, rel_data_dir);
+
+    return Py_BuildValue ("s", urj_get_data_dir());
+}
+
 
 static PyMethodDef module_methods[] =
 {
     {"loglevel", urjtag_loglevel, METH_VARARGS,
      "Set log level of the urjtag library"},
     {"setDataDir", urjtag_set_data_dir, METH_VARARGS,
-     "Set urjtag data directory" },
+     "Set urjtag data directory"},
+    {"relocDataDir", urjtag_reloc_data_dir, METH_VARARGS,
+     "Relocate urjtag data directory (path relative to this module or absolute)"},
     {"getDataDir", urjtag_get_data_dir, METH_VARARGS,
      "Get data directory of this module"},
     {NULL}                      /* Sentinel */
@@ -1217,16 +1276,6 @@ static PyMethodDef module_methods[] =
 static int
 mexec(PyObject *m)
 {
-#ifdef PYMODULE_SET_DATADIR
-    PyObject   *p = NULL;
-    PyObject   *e;
-    const char *modFile;
-    char       *modPath;
-    char       *bs;
-    Py_ssize_t  modFileSize;
-#endif
-
-
     UrjtagError = PyErr_NewException ("urjtag.error", NULL, NULL);
     Py_INCREF (UrjtagError);
     PyModule_AddObject (m, "error", UrjtagError);
@@ -1255,38 +1304,7 @@ mexec(PyObject *m)
     PyModule_AddObject (m, "register", (PyObject *) &urj_pyregister_Type);
 
 #ifdef PYMODULE_SET_DATADIR
-    if ( PYMODULE_SET_DATADIR[0] != '/' ) {
-        p = PyObject_GetAttrString(m, "__file__");
-        if ( p ) {
-            if ( (modFile = PyUnicode_AsUTF8AndSize(p, &modFileSize)) ) {
-                modFileSize += strlen(PYMODULE_SET_DATADIR) + 1;
-                if ( (modPath = malloc(modFileSize)) ) {
-                    strncpy(modPath, modFile, modFileSize);
-                    if ( (bs = strrchr(modPath, '/')) ) {
-                       strncpy(bs+1, PYMODULE_SET_DATADIR, modFileSize - (bs+1-modPath));
-                    }
-                    urj_set_data_dir(modPath);
-                }
-                free(modPath);
-            } else {
-                if ( (e = PyErr_Occurred()) ) {
-                    fprintf(stdout, "WARNING (skipping urj_set_data_dir): ");
-                    PyObject_Print(e, stdout, 0);
-                }
-                Py_ErrClear();
-            }
-            Py_DECREF(p);
-        } else {
-            if ( (e = PyErr_Occurred()) ) {
-                fprintf(stdout, "WARNING (skipping urj_set_data_dir): ");
-                PyObject_Print(e, stdout, 0);
-            }
-            Py_ErrClear();
-        }
-    } else {
-        /* use absolute path verbatim */
-        urj_set_data_dir(PYMODULE_SET_DATADIR);
-    }
+    reloc_data_dir(m, PYMODULE_SET_DATADIR);
 #endif
     return 0;
 }
