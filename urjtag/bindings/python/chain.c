@@ -559,7 +559,7 @@ urj_pyc_signal_list(urj_pychain_t *self, PyObject *args)
             filt |= FILT_I;
         if ( 'O' == toupper(filts[0]) )
             filt |= FILT_O;
-  
+
         if ( 0 == strncasecmp(filts, "io", 2) || 0 == strncasecmp(filts, "bi", 2) )
             filt |= (FILT_I | FILT_O);
     }
@@ -1006,7 +1006,7 @@ urj_pyc_get_register (urj_pychain_t *self, PyObject *args)
         return NULL;
     if (!PyArg_ParseTuple (args, "is|s", &partn, &regname, &instname))
         return NULL;
-    
+
     if(partn < 0 || partn > urc->parts->len) {
          PyErr_SetString (UrjtagError,
                           _("part number out of range for chain length"));
@@ -1183,35 +1183,49 @@ urjtag_loglevel (PyObject *self, PyObject *args)
     return Py_BuildValue ("");
 }
 
+static PyObject *
+urjtag_set_data_dir (PyObject *self, PyObject *args)
+{
+    const char  *data_dir;
+
+    if (!PyArg_ParseTuple (args, "s", &data_dir))
+        return NULL;
+
+    urj_set_data_dir(data_dir);
+
+    return Py_BuildValue ("");  /* python "None" */
+}
+
+static PyObject *
+urjtag_get_data_dir (PyObject *self, PyObject *args)
+{
+    return Py_BuildValue ("s", urj_get_data_dir());
+}
+
+
 static PyMethodDef module_methods[] =
 {
     {"loglevel", urjtag_loglevel, METH_VARARGS,
      "Set log level of the urjtag library"},
+    {"setDataDir", urjtag_set_data_dir, METH_VARARGS,
+     "Set urjtag data directory" },
+    {"getDataDir", urjtag_get_data_dir, METH_VARARGS,
+     "Get data directory of this module"},
     {NULL}                      /* Sentinel */
 };
 
-static struct PyModuleDef urjtag_moduledef =
+static int
+mexec(PyObject *m)
 {
-    PyModuleDef_HEAD_INIT,
-    "urjtag",
-    "Python extension module for urjtag",
-    -1,
-    module_methods,
-};
+#ifdef PYMODULE_SET_DATADIR
+    PyObject   *p = NULL;
+    PyObject   *e;
+    const char *modFile;
+    char       *modPath;
+    char       *bs;
+    Py_ssize_t  modFileSize;
+#endif
 
-MODINIT_DECL (urjtag)
-{
-    PyObject *m;
-
-    if (PyType_Ready (&urj_pychain_Type) < 0)
-        return MODINIT_ERROR_VAL;
-    if (PyType_Ready (&urj_pyregister_Type) < 0)
-        return MODINIT_ERROR_VAL;
-
-    m = PyModule_Create (&urjtag_moduledef);
-
-    if (m == NULL)
-        return MODINIT_ERROR_VAL;
 
     UrjtagError = PyErr_NewException ("urjtag.error", NULL, NULL);
     Py_INCREF (UrjtagError);
@@ -1239,6 +1253,91 @@ MODINIT_DECL (urjtag)
     PyModule_AddObject (m, "chain", (PyObject *) &urj_pychain_Type);
     Py_INCREF (&urj_pyregister_Type);
     PyModule_AddObject (m, "register", (PyObject *) &urj_pyregister_Type);
+
+#ifdef PYMODULE_SET_DATADIR
+    if ( PYMODULE_SET_DATADIR[0] != '/' ) {
+        p = PyObject_GetAttrString(m, "__file__");
+        if ( p ) {
+            if ( (modFile = PyUnicode_AsUTF8AndSize(p, &modFileSize)) ) {
+                modFileSize += strlen(PYMODULE_SET_DATADIR) + 1;
+                if ( (modPath = malloc(modFileSize)) ) {
+                    strncpy(modPath, modFile, modFileSize);
+                    if ( (bs = strrchr(modPath, '/')) ) {
+                       strncpy(bs+1, PYMODULE_SET_DATADIR, modFileSize - (bs+1-modPath));
+                    }
+                    urj_set_data_dir(modPath);
+                }
+                free(modPath);
+            } else {
+                if ( (e = PyErr_Occurred()) ) {
+                    fprintf(stdout, "WARNING (skipping urj_set_data_dir): ");
+                    PyObject_Print(e, stdout, 0);
+                }
+                Py_ErrClear();
+            }
+            Py_DECREF(p);
+        } else {
+            if ( (e = PyErr_Occurred()) ) {
+                fprintf(stdout, "WARNING (skipping urj_set_data_dir): ");
+                PyObject_Print(e, stdout, 0);
+            }
+            Py_ErrClear();
+        }
+    } else {
+        /* use absolute path verbatim */
+        urj_set_data_dir(PYMODULE_SET_DATADIR);
+    }
+#endif
+    return 0;
+}
+
+static PyModuleDef_Slot slots[] = {
+    { Py_mod_exec, mexec },
+    { 0, NULL },
+};
+
+#if (PY_MAJOR_VERSION > 3 || (3 == PY_MAJOR_VERSION && PY_MINOR_VERSION >= 5))
+#define MULTI_INIT
+#endif
+
+static struct PyModuleDef urjtag_moduledef =
+{
+    PyModuleDef_HEAD_INIT,
+    "urjtag",
+    "Python extension module for urjtag",
+#ifdef MULTI_INIT
+    0,
+#else
+    -1,
+#endif
+    module_methods,
+#ifdef MULTI_INIT
+    slots,
+#endif
+};
+
+
+MODINIT_DECL (urjtag)
+{
+    PyObject   *m;
+    if (PyType_Ready (&urj_pychain_Type) < 0)
+        return MODINIT_ERROR_VAL;
+    if (PyType_Ready (&urj_pyregister_Type) < 0)
+        return MODINIT_ERROR_VAL;
+
+#ifdef MULTI_INIT
+    m = PyModuleDef_Init(&urjtag_moduledef);
+#else
+
+    m = PyModule_Create (&urjtag_moduledef);
+#endif
+
+    if (m == NULL)
+        return MODINIT_ERROR_VAL;
+
+#ifndef MULTI_INIT
+    mexec(m);
+#endif
 
     return MODINIT_SUCCESS_VAL (m);
 }
