@@ -21,7 +21,7 @@ urj_set_argv0(const char *argv0)
 static char *jtag_data_dir = NULL;
 
 void
-irj_set_data_dir(const char *data_dir)
+urj_set_data_dir(const char *data_dir)
 {
 	free(jtag_data_dir);
 	jtag_data_dir = strdup(data_dir);
